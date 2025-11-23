@@ -1,292 +1,248 @@
-Fuel Price Optimization – MLOps Project
+# Fuel Price Optimization — MLOps Project
 
-This project implements a production-ready ML pipeline for optimizing retail fuel prices using historical data, demand modeling, and business constraints.
-It demonstrates end-to-end MLOps, including data ingestion, validation, feature engineering, model training, serving, monitoring, and CI/CD.
+A production-ready end-to-end MLOps pipeline for optimizing retail fuel prices using historical data, demand modeling, and business constraints. The system forecasts daily volume for candidate prices and recommends the price that maximizes profit while satisfying business rules.
 
-1. Project Overview
+Table of Contents
+- Project overview
+- Architecture
+- Quick start
+- Data pipeline
+- Machine learning strategy
+- Recommendation API (FastAPI)
+- Docker
+- CI/CD
+- Scheduling (Airflow)
+- Monitoring & observability
+- Roadmap & improvements
+- Contributing
+- License & contact
 
-A retail petrol company adjusts fuel prices daily. The goal is to maximize profit by setting an optimal daily price based on:
+## 1. Project overview
 
-Company cost
+A retail petrol company adjusts fuel prices daily. The objective is to choose price p that maximizes:
 
-Competitor prices
+```
+profit = (p - cost) * predicted_volume(p)
+```
 
-Historical demand
+We use historical sales, competitor prices, seasonality and price elasticity to forecast volume for candidate prices and we enforce business constraints when recommending prices.
 
-Seasonality
+Key features:
+- End-to-end ML pipeline: ingest → validate → transform → train → serve
+- REST API for price recommendation
+- MLOps tooling: MLflow (tracking), Airflow (scheduling), Docker (deployment)
+- Monitoring: Evidently (drift), Prometheus, Grafana
+- CI/CD with GitHub Actions
 
-Price elasticity
+## 2. Architecture
 
-Prediction Goal:
-Forecast daily volume given a candidate price
-`Choose price maximizing profit = (price − cost) × volume`
+Repository layout:
 
-This repository includes:
+```
+data/
+  ├── raw/
+  ├── processed/
+  └── feature_store/
 
-✔ ML pipeline
-✔ MLOps automation
-✔ REST API for prediction
-✔ CI/CD pipeline
-✔ Monitoring setup
-✔ Training + inference scripts
-2. Architecture
-`data/
- ├── raw/
- ├── processed/
- └── feature_store/`
-
-`src/
- ├── ingestion.py
- ├── validate.py
- ├── transform.py
- ├── train.py
- ├── recommend.py
- ├── serve.py
- └── utils/`
+src/
+  ├── ingestion.py
+  ├── validate.py
+  ├── transform.py
+  ├── train.py
+  ├── recommend.py
+  ├── serve.py
+  └── utils/
 
 models/
-`monitoring/`
-`.github/workflows/ci-cd.yml`
+monitoring/
+.github/workflows/ci-cd.yml
+```
 
-3. Key Assumptions
+## 3. Quick start
 
-Daily data delivered in CSV or JSON.
+Prerequisites: Python 3.8+, Docker (optional), Airflow (optional)
 
-Regression model used (XGBoost / RandomForest).
+Create virtual environment and install deps:
 
-Model served via FastAPI.
+```
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-MLflow used for tracking.
+Run core steps locally (examples):
 
-Airflow for scheduled pipeline runs.
+```
+# Ingest raw data
+python src/ingestion.py --csv data/oil_retail_history.csv
 
-Docker for packaging & deployment.
+# Validate data
+python src/validate.py data/raw/oil_retail_history.csv
 
-Deployment target: Linux VM or Kubernetes.
+# Transform / feature engineering
+python src/transform.py --csv data/raw/oil_retail_history.csv --out data/feature_store/features.parquet
 
-4. Data Pipeline
-4.1 Ingestion
+# Train model
+python src/train.py --features data/feature_store/features.parquet
 
-`Reads raw CSV/JSON and stores into /data/raw`.
+# Serve model
+uvicorn src.serve:app --host 0.0.0.0 --port 8080
+```
 
-`python src/ingestion.py --csv data/oil_retail_history.csv`
+## 4. Data pipeline
 
-Tasks:
+### 4.1 Ingestion
+Reads raw CSV/JSON and stores originals in `data/raw/` with timestamping and light schema alignment.
 
-Store original dataset
+Example:
+```
+python src/ingestion.py --csv data/oil_retail_history.csv
+```
 
-Timestamp entries
+### 4.2 Validation
+Uses Pydantic and Great Expectations to check required columns, ranges and sanity checks (no negative prices/volumes, competitor prices non-zero).
 
-Basic schema alignment
+Example:
+```
+python src/validate.py data/raw/oil_retail_history.csv
+```
 
-4.2 Validation
+### 4.3 Feature engineering
+Creates lag features, rolling windows, seasonality encodings, and price differentials. Features are written to `data/feature_store/` as Parquet.
 
-Using Pydantic + Great Expectations:
+Example:
+```
+python src/transform.py --csv data/raw/oil_retail_history.csv --out data/feature_store/features.parquet
+```
 
-`python src/validate.py data/raw/oil_retail_history.csv`
+## 5. Machine learning strategy
 
-Checks:
+We model daily volume given a candidate price using tree-based regression (XGBoost / RandomForest) with features including:
+- company price
+- competitor prices
+- lagged volumes
+- rolling averages
+- seasonal components
 
-Required columns
+Profit calculation for candidate price:
+```
+profit = (candidate_price - cost) * predicted_volume
+```
 
-No negative prices/volumes
+Business constraints enforced in recommendation logic:
+- Max ±5% daily price change
+- Max 10% above lowest competitor
+- Minimum profitability margin 5%
 
-Numeric ranges valid
+Training artifacts and metrics tracked with MLflow (MSE, R², feature importance, model artifact).
 
-Competitor prices non-zero
+## 6. Recommendation & API (FastAPI)
 
-4.3 Feature Engineering
+Endpoint: POST /recommend
 
-Lag features, rolling windows, seasonality, price differentials.
+Request body (example):
+```json
+{
+  "date": "2025-11-23",
+  "cost": 1.20,
+  "previous_price": 1.80,
+  "competitor_prices": [1.78, 1.82, 1.79],
+  "features": {
+    "day_of_week": 0,
+    "rolling_avg_7": 12500
+  }
+}
+```
 
-`python src/transform.py \
-  --csv data/raw/oil_retail_history.csv \
-  --out data/feature_store/features.parquet`
-
-
-Output stored in feature_store/.
-
-5. Machine Learning Strategy
-
-Volume is modeled using:
-
-Company price
-
-Competitor prices
-
-Lagged volume
-
-Rolling averages
-
-Seasonal components
-
-Profit is calculated for candidate prices:
-
-`profit = (candidate_price - cost) × predicted_volume`
-
-Business Constraints
-
-`Max ±5% daily price change`
-
-`Max 10% above lowest competitor`
-
-`Minimum profitability margin 5%`
-
-5.1 Train Model
-`python src/train.py --features data/feature_store/features.parquet`
-
-`MLflow logs:`
-
-`MSE, R²`
-
-Feature importance
-
-Model artifact
-
-5.2 Recommend Daily Price
-`curl -X POST http://localhost:8080/recommend \
-  -H "Content-Type: application/json" \
-  -d @today_example.json`
-
-Returns example:
-
-`{
+Response example:
+```json
+{
   "price": 1.87,
   "volume": 12450.3,
-  "profit": 8311.5
-}`
+  "profit": 8311.5,
+  "constraints_applied": [
+    "max_delta_percent",
+    "max_above_competitor"
+  ],
+  "model_run_id": "mlflow:123abc"
+}
+```
 
-6. Model Serving (FastAPI)
+Example curl:
+```
+curl -X POST http://localhost:8080/recommend \
+  -H "Content-Type: application/json" \
+  -d @today_example.json
+```
 
-Start server:
+## 7. Docker
 
-`uvicorn src.serve:app --host 0.0.0.0 --port 8080`
+Build image:
+```
+docker build -t fuel-price-optimizer .
+```
 
+Run container:
+```
+docker run -p 8080:8080 fuel-price-optimizer
+```
 
-Request example:
+## 8. CI/CD
 
-`POST /recommend`
+GitHub Actions workflow `.github/workflows/ci-cd.yml` automates:
+- Install dependencies
+- Lint (flake8, black)
+- Run tests
+- Build Docker image
+- Push image to container registry
+- Deploy to target environment (VM or Kubernetes)
 
-7. Docker Setup
-`Build image
-docker build -t fuel-price-optimizer .`
-
-Run container
-`docker run -p 8080:8080 fuel-price-optimizer`
-
-8. CI/CD Pipeline
-
-GitHub Actions automatically:
-
-Installs dependencies
-
-Runs linting (flake8, black)
-
-Runs tests
-
-Builds Docker image
-
-Pushes image to container registry
-
-Deploys to server
-
-Trigger CI/CD:
-
-`git add .
+Trigger pipeline:
+```
+git add .
 git commit -m "trigger CI/CD"
-git push origin main`
+git push origin main
+```
 
-Workflow file is in:
+## 9. Scheduling (Airflow DAG)
 
-`.github/workflows/ci-cd.yml`
-
-9. Scheduling (Airflow DAG)
+Airflow DAG runs daily and orchestrates:
+1. ingestion
+2. validation
+3. transformation
+4. training
 
 Start Airflow:
+```
+airflow webserver
+airflow scheduler
+```
 
-`airflow webserver
-airflow scheduler`
+## 10. Monitoring & observability
 
+- Evidently: Data drift and quality reports
+- Prometheus: API metrics
+- Grafana: Dashboards
+- ELK / Datadog: Logs
 
-Daily tasks:
-
-1️⃣ ingestion
-2️⃣ validation
-3️⃣ transformation
-4️⃣ training
-
-10. Monitoring & Observability
-
-Tools used:
-
-Evidently → drift detection
-
-Prometheus → API metrics
-
-Grafana → dashboards
-
-ELK/Datadog → logs
-
-`Generate drift report
+Evidently example:
+```python
 from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset`
+from evidently.metric_preset import DataDriftPreset
 
-`report = Report(metrics=[DataDriftPreset()])
+report = Report(metrics=[DataDriftPreset()])
 report.run(reference_data=ref_df, current_data=new_df)
-report.save_html("monitoring/report.html")`
+report.save_html("monitoring/report.html")
+```
 
-11. Improvements & Extensions
-Short-Term
+## 11. Roadmap & improvements
 
-Feast online feature store
+Short-term
+- Integrate Feast online feature store
+- Increase test coverage and CI tests
+- Blue/green & canary deployments
 
-CI test coverage
-
-Blue-green & canary deployments
-
-Long-Term
-
-RL-based dynamic pricing
-
-Real-time competitor streaming
-
-Optimization across multiple stations
-
-12. Useful Commands Quick Reference
-`Data Pipeline
-python src/ingestion.py --csv data/oil_retail_history.csv
-python src/validate.py data/raw/oil_retail_history.csv
-python src/transform.py --csv data/raw/oil_retail_history.csv --out features.parquet`
-
-Train Model
-`python src/train.py --features data/feature_store/features.parquet`
-
-Serve Model
-`uvicorn src.serve:app --host 0.0.0.0 --port 8080`
-
-Docker
-`docker build -t fuel-price-optimizer .`
-`docker run -p 8080:8080 fuel-price-optimizer`
-
-Trigger CI/CD
-`git add .`
-`git commit -m "trigger CI/CD"
-git push origin main`
-
-13. Final Notes
-
-This project demonstrates full end-to-end MLOps capability:
-
-Reproducible pipelines
-
-Automated training
-
-Automated deployment
-
-Dockerized FastAPI service
-
-Monitoring
-
-CI/CD integration
-
-Business constraints baked into pricing system
+Long-term
+- RL-based dynamic pricing
+- Real-time competitor streaming & ingestion
+- Multi-station optimization (global objective)
