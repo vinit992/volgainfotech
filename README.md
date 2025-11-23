@@ -240,9 +240,13 @@ report.save_html("monitoring/report.html")
 Short-term
 - Integrate Feast online feature store
 - Increase test coverage and CI tests
-- Blue/green & canary deployments
+- Blue/green & canary deployments for rollback mechnism
+- use uv or poetry for package installtion it give the fast package installtion compare to pip. I will recommand uv
 
 Long-term
+- Add monitoring for models and infra
+- Add Sonarqube, Linting and pyrefly for code checking
+- I recommend the Toon instead of json to save the tokens
 - RL-based dynamic pricing
 - Real-time competitor streaming & ingestion
 - Multi-station optimization (global objective)
