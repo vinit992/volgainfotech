@@ -60,7 +60,7 @@ monitoring/
 
 ## 3. Quick start
 
-Prerequisites: Python 3.8+, Docker (optional), Airflow (optional)
+Prerequisites: Python 3.10+, Docker (optional), Airflow (optional)
 
 Create virtual environment and install deps:
 
