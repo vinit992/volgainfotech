@@ -30,19 +30,19 @@ This repository includes:
 ✔ Monitoring setup
 ✔ Training + inference scripts
 2. Architecture
-data/
+`data/
  ├── raw/
  ├── processed/
- └── feature_store/
+ └── feature_store/`
 
-src/
+`src/
  ├── ingestion.py
  ├── validate.py
  ├── transform.py
  ├── train.py
  ├── recommend.py
  ├── serve.py
- └── utils/
+ └── utils/`
 
 models/
 `monitoring/`
@@ -67,7 +67,7 @@ Deployment target: Linux VM or Kubernetes.
 4. Data Pipeline
 4.1 Ingestion
 
-Reads raw `CSV/JSON and stores into /data/raw`.
+`Reads raw CSV/JSON and stores into /data/raw`.
 
 `python src/ingestion.py --csv data/oil_retail_history.csv`
 
@@ -165,7 +165,7 @@ Start server:
 
 Request example:
 
-POST /recommend
+`POST /recommend`
 
 7. Docker Setup
 `Build image
