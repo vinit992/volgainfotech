@@ -1,4 +1,4 @@
-# Fuel Price Optimization — MLOps Project
+# Fuel Price Optimization — MLOps steps
 
 A production-ready end-to-end MLOps pipeline for optimizing retail fuel prices using historical data, demand modeling, and business constraints. The system forecasts daily volume for candidate prices and recommends the price that maximizes profit while satisfying business rules.
 
