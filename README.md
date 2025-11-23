@@ -1,258 +1,292 @@
-# volgainfotech
+Fuel Price Optimization – MLOps Project
 
-Fuel Price Optimization – MLOps Summary Document
-1. Problem Understanding
+This project implements a production-ready ML pipeline for optimizing retail fuel prices using historical data, demand modeling, and business constraints.
+It demonstrates end-to-end MLOps, including data ingestion, validation, feature engineering, model training, serving, monitoring, and CI/CD.
 
-A retail petrol company needs to optimize its daily fuel price to maximize profit.
-The model must consider:
+1. Project Overview
 
-Cost of fuel
+A retail petrol company adjusts fuel prices daily. The goal is to maximize profit by setting an optimal daily price based on:
+
+Company cost
 
 Competitor prices
 
-Historical demand (volume)
+Historical demand
 
 Seasonality
 
-Price elasticity of demand
+Price elasticity
 
-Business guardrails (max price change, competitive alignment)
+Prediction Goal:
+Forecast daily volume given a candidate price
+`Choose price maximizing profit = (price − cost) × volume`
 
-The MLOps responsibility is to productionize the entire ML lifecycle: data ingestion → validation → feature engineering → training → model serving → monitoring → CI/CD.
+This repository includes:
 
-2. Key Assumptions
+✔ ML pipeline
+✔ MLOps automation
+✔ REST API for prediction
+✔ CI/CD pipeline
+✔ Monitoring setup
+✔ Training + inference scripts
+2. Architecture
+data/
+ ├── raw/
+ ├── processed/
+ └── feature_store/
 
-Historical data arrives daily as batch (CSV or JSON).
+src/
+ ├── ingestion.py
+ ├── validate.py
+ ├── transform.py
+ ├── train.py
+ ├── recommend.py
+ ├── serve.py
+ └── utils/
 
-The model is regression-based (XGBoost chosen).
+models/
+`monitoring/`
+`.github/workflows/ci-cd.yml`
 
-Daily predictions must be served through an API (FastAPI).
+3. Key Assumptions
 
-MLflow is used for experiment tracking + model registry.
+Daily data delivered in CSV or JSON.
 
-Airflow handles scheduling.
+Regression model used (XGBoost / RandomForest).
 
-Docker used for packaging.
+Model served via FastAPI.
 
-Deployment target is a Linux VM, or optionally Kubernetes.
+MLflow used for tracking.
 
-3. Data Pipeline Design
-3.1 Ingestion
+Airflow for scheduled pipeline runs.
 
-Daily ingestion reads raw CSV or JSON, e.g.:
+Docker for packaging & deployment.
 
-python src/ingestion.py --csv data/oil_retail_history.csv
+Deployment target: Linux VM or Kubernetes.
 
-Responsibilities:
+4. Data Pipeline
+4.1 Ingestion
 
-Store raw data in /data/raw/
+Reads raw `CSV/JSON and stores into /data/raw`.
 
-Ensure schema consistency
+`python src/ingestion.py --csv data/oil_retail_history.csv`
 
-Time-stamp new daily entries
+Tasks:
 
-3.2 Validation
+Store original dataset
 
-Performed using Pydantic + Great Expectations:
+Timestamp entries
 
-python src/validate.py data/raw/oil_retail_history.csv
+Basic schema alignment
 
-Validation checks:
+4.2 Validation
 
-Required columns exist
+Using Pydantic + Great Expectations:
 
-No negative prices or volumes
+`python src/validate.py data/raw/oil_retail_history.csv`
 
-Price/cost within expected numeric ranges
+Checks:
+
+Required columns
+
+No negative prices/volumes
+
+Numeric ranges valid
 
 Competitor prices non-zero
 
-3.3 Feature Engineering
+4.3 Feature Engineering
 
-Lag features, rolling windows, price differentials:
+Lag features, rolling windows, seasonality, price differentials.
 
-python src/transform.py --csv data/raw/oil_retail_history.csv --out features.parquet
+`python src/transform.py \
+  --csv data/raw/oil_retail_history.csv \
+  --out data/feature_store/features.parquet`
 
-Output stored in /data/feature_store/features.parquet.
 
-4. Machine Learning Strategy
-4.1 Approach
+Output stored in feature_store/.
 
-We model volume as a function of:
+5. Machine Learning Strategy
+
+Volume is modeled using:
 
 Company price
 
 Competitor prices
 
-Historical demand (lags)
+Lagged volume
 
 Rolling averages
 
-Seasonality
+Seasonal components
 
-Then for each candidate price, predicted profit =
-(price – cost) × predicted volume
+Profit is calculated for candidate prices:
 
-Optimal price is the one with the highest profit, subject to:
+`profit = (candidate_price - cost) × predicted_volume`
 
-Max daily price change: ±5%
+Business Constraints
 
-Price cannot exceed lowest competitor by >10%
+`Max ±5% daily price change`
 
-Minimum profit margin: 5%
+`Max 10% above lowest competitor`
 
-4.2 Model Training
-python src/train.py --features data/feature_store/features.parquet
+`Minimum profitability margin 5%`
 
-Logged to MLflow:
+5.1 Train Model
+`python src/train.py --features data/feature_store/features.parquet`
 
-MSE
+`MLflow logs:`
 
-R²
+`MSE, R²`
 
 Feature importance
 
 Model artifact
 
-4.3 Price Recommendation
-
-Using the model:
-
-curl -X POST http://localhost:8080/recommend \
+5.2 Recommend Daily Price
+`curl -X POST http://localhost:8080/recommend \
   -H "Content-Type: application/json" \
-  -d @today_example.json
+  -d @today_example.json`
 
-Output includes:
+Returns example:
 
-Recommended price
-
-Expected volume
-
-Expected profit
-
-5. Deployment Pipeline
-5.1 FastAPI Service
-
-Start locally:
-
-uvicorn src.serve:app --host 0.0.0.0 --port 8080
-
-5.2 Docker Build & Run
-docker build -t fuel-price-optimizer:latest .
-docker run -p 8080:8080 fuel-price-optimizer:latest
-
-5.3 CI/CD Pipeline (GitHub Actions)
-
-Pipeline includes:
-
-Install dependencies
-
-Lint (flake8, black)
-
-Run tests
-
-Build Docker image
-
-Push to registry
-
-Deploy to server
-
-Trigger on pushes to main.
-
-6. Scheduling (Airflow DAG)
-
-Daily automated pipeline:
-
-airflow webserver
-airflow scheduler
-
-Airflow DAG tasks:
-
-ingestion
-
-validation
-
-transformation
-
-training
-
-7. Monitoring & Observability
-Production Monitoring Tools
-
-Evidently → data drift, prediction drift
-
-Prometheus → API latency, errors
-
-Grafana → dashboards
-
-JSON logs shipped to ELK/Datadog
-
-Generate drift report
-from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset
-
-report = Report(metrics=[DataDriftPreset()])
-report.run(reference_data=ref_df, current_data=new_df)
-report.save_html("monitoring/report.html")
-
-8. Example Price Recommendation (Illustration)
-
-Given:
-
-{
-  "date": "2024-01-10",
-  "price": 1.85,
-  "cost": 1.20,
-  "comp1_price": 1.88,
-  "comp2_price": 1.82,
-  "comp3_price": 1.90
-}
-
-Model may output:
-
-{
+`{
   "price": 1.87,
   "volume": 12450.3,
   "profit": 8311.5
-}
+}`
 
-9. Improvements & Extensions
+6. Model Serving (FastAPI)
+
+Start server:
+
+`uvicorn src.serve:app --host 0.0.0.0 --port 8080`
+
+
+Request example:
+
+POST /recommend
+
+7. Docker Setup
+`Build image
+docker build -t fuel-price-optimizer .`
+
+Run container
+`docker run -p 8080:8080 fuel-price-optimizer`
+
+8. CI/CD Pipeline
+
+GitHub Actions automatically:
+
+Installs dependencies
+
+Runs linting (flake8, black)
+
+Runs tests
+
+Builds Docker image
+
+Pushes image to container registry
+
+Deploys to server
+
+Trigger CI/CD:
+
+`git add .
+git commit -m "trigger CI/CD"
+git push origin main`
+
+Workflow file is in:
+
+`.github/workflows/ci-cd.yml`
+
+9. Scheduling (Airflow DAG)
+
+Start Airflow:
+
+`airflow webserver
+airflow scheduler`
+
+
+Daily tasks:
+
+1️⃣ ingestion
+2️⃣ validation
+3️⃣ transformation
+4️⃣ training
+
+10. Monitoring & Observability
+
+Tools used:
+
+Evidently → drift detection
+
+Prometheus → API metrics
+
+Grafana → dashboards
+
+ELK/Datadog → logs
+
+`Generate drift report
+from evidently.report import Report
+from evidently.metric_preset import DataDriftPreset`
+
+`report = Report(metrics=[DataDriftPreset()])
+report.run(reference_data=ref_df, current_data=new_df)
+report.save_html("monitoring/report.html")`
+
+11. Improvements & Extensions
 Short-Term
 
-Integrate Feast as an Online Feature Store
+Feast online feature store
 
-Add unit tests + integration tests
+CI test coverage
 
-Canary deployments
+Blue-green & canary deployments
 
 Long-Term
 
-Reinforcement Learning / dynamic pricing
+RL-based dynamic pricing
 
-Real-time competitor price streaming
+Real-time competitor streaming
 
-Multi-station optimization (regional management)
+Optimization across multiple stations
 
-Useful Commands Summary
-Data Pipeline
+12. Useful Commands Quick Reference
+`Data Pipeline
 python src/ingestion.py --csv data/oil_retail_history.csv
 python src/validate.py data/raw/oil_retail_history.csv
-python src/transform.py --csv data/raw/oil_retail_history.csv --out features.parquet
+python src/transform.py --csv data/raw/oil_retail_history.csv --out features.parquet`
 
 Train Model
-python src/train.py --features data/feature_store/features.parquet
+`python src/train.py --features data/feature_store/features.parquet`
 
-Serve API
-uvicorn src.serve:app --host 0.0.0.0 --port 8080
+Serve Model
+`uvicorn src.serve:app --host 0.0.0.0 --port 8080`
 
 Docker
-docker build -t fuel-price-optimizer .
-docker run -p 8080:8080 fuel-price-optimizer
+`docker build -t fuel-price-optimizer .`
+`docker run -p 8080:8080 fuel-price-optimizer`
 
-Trigger CI/CD (GitHub Actions)
+Trigger CI/CD
+`git add .`
+`git commit -m "trigger CI/CD"
+git push origin main`
 
-Push to main:
+13. Final Notes
 
-git add .
-git commit -m "trigger CI/CD"
-git push origin main
+This project demonstrates full end-to-end MLOps capability:
+
+Reproducible pipelines
+
+Automated training
+
+Automated deployment
+
+Dockerized FastAPI service
+
+Monitoring
+
+CI/CD integration
+
+Business constraints baked into pricing system
