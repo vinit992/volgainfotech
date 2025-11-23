@@ -1,0 +1,39 @@
+# global configuration for pipelines, training and business rules
+data:
+raw_path: data/raw/oil_retail_history.csv
+processed_path: data/processed/
+feature_store_path: data/feature_store/
+
+ingestion:
+schedule_daily: true
+max_records_per_day: 10000
+
+features:
+lags: [1,7,14,30]
+rolling_windows: [7,14,30]
+
+training:
+model_type: xgboost
+random_seed: 42
+test_size: 0.2
+val_size: 0.15
+hyperparams:
+n_estimators: 200
+max_depth: 6
+learning_rate: 0.05
+
+business_rules:
+max_price_change_pct: 0.05 # max 5% change per day
+min_margin: 0.05 # minimum profit margin (5%)
+competitor_gap_allowed: 0.10 # cannot price > competitors by more than 10%
+
+mlflow:
+tracking_uri: http://localhost:5000
+experiment_name: fuel-price-optimization
+
+monitoring:
+evidently_report_path: monitoring/reports/
+
+api:
+host: 0.0.0.0
+port: 8080
